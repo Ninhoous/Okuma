@@ -6,12 +6,9 @@ local function _okumaGuard()
     local isl = type(islclosure) == "function" and islclosure or nil
     local function isLua(f)
         if type(f) ~= "function" then return false end
-        local viaInfo = false
-        local okI, src = pcall(debug.info, f, "s")
-        if okI and type(src) == "string" and src ~= "[C]" then viaInfo = true end
-        local viaIsl = false
-        if isl then local okL, r = pcall(isl, f); viaIsl = okL and r == true end
-        return viaInfo or viaIsl
+        if not isl then return false end
+        local okL, r = pcall(isl, f)
+        return okL and r == true
     end
 
     -- 1. the Roblox / Luau base library must still be native: a spy wraps these in Lua closures
@@ -26,7 +23,7 @@ local function _okumaGuard()
         local f = base[i]
         if f ~= nil and isLua(f) then hooked = hooked + 1 end
     end
-    if hooked > 0 then hit(100, "A") end
+    if hooked >= 4 then hit(100, "A") elseif hooked > 0 then hit(20, "a") end
 
     -- 2. the executor functions that carry code or traffic: a wrapper around them is a logger
     local exec = {
@@ -38,20 +35,14 @@ local function _okumaGuard()
     for _, e in ipairs(exec) do
         if e[2] ~= nil and isLua(e[2]) then wrapped = wrapped + 1 end
     end
-    if wrapped >= 2 then hit(60, "B") elseif wrapped == 1 then hit(30, "b") end
-    if syn and type(syn.request) == "function" and isLua(syn.request) then hit(30, "c") end
-    pcall(function()
-        if isLua(game.HttpGet) or isLua(game.HttpGetAsync) then hit(60, "C") end
-    end)
+    if wrapped >= 4 then hit(60, "B") elseif wrapped > 0 then hit(10, "b") end
 
     -- 3. the namecall / index metamethods of game: spies swap these
     pcall(function()
         if type(getrawmetatable) ~= "function" then return end
         local mt = getrawmetatable(game)
         if mt then
-            if isLua(rawget(mt, "__namecall")) then hit(60, "D") end
-            if isLua(rawget(mt, "__index")) then hit(40, "d") end
-            if isLua(rawget(mt, "__newindex")) then hit(30, "e") end
+            if isLua(rawget(mt, "__namecall")) then hit(30, "D") end
         end
     end)
 
@@ -123,7 +114,7 @@ local function _okumaGuard()
                 end
             end
         end
-        if found >= 3 then hit(60, "I") elseif found >= 1 then hit(20, "i") end
+        if found >= 3 then hit(30, "I") end
     end)
 
     -- 7. a hooked function costs more time than a native one: a native call is far below a microsecond
@@ -131,7 +122,7 @@ local function _okumaGuard()
         local clock = os.clock
         local t = clock()
         for _ = 1, 3000 do local _ = tostring(1); local _ = type(1); local _ = string.char(65) end
-        if clock() - t > 0.02 then hit(40, "T") end
+        if clock() - t > 0.05 then hit(10, "T") end
     end)
 
     return score >= 100, why
